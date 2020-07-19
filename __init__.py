@@ -73,26 +73,18 @@ class CaseInsensitiveDict(dict):
             self.__setitem__(k, v)
 
 
-def get_controller_by_name(name):
-    devices, browser = pychromecast.get_listed_chromecasts([name])
-    pychromecast.discovery.stop_discovery(browser)
-    cc = list(devices[0])[0]
-    cc.wait()
-    cc.media_controller.block_until_active(10)
-    return cc.media_controller
-
-
 def device_user(intent_function):
     def new_function(self, message):
-        device = message.data.get("Device", self._default_devicename)
-        if not device:
+        device_name = message.data.get("Device", self._default_devicename)
+        if not device_name:
             self.speak_dialog('no.device')
             return
-        device_name = self._devices_by_name[device].device.friendly_name
-        controller = get_controller_by_name(device_name)
+        device = self._devices_by_name[device_name]
+        device.wait()
+        controller = device.media_controller
+        controller.block_until_active(10)
         intent_function(self, message, controller)
     return new_function
-
 
 
 class ChromecastControllerSkill(MycroftSkill):
@@ -193,7 +185,6 @@ class ChromecastControllerSkill(MycroftSkill):
     # @device_user
     # def _previous(self, _message, controller):
     #     controller.queue_prev()
-
 
 
 def create_skill():
