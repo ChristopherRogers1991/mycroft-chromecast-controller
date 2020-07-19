@@ -82,6 +82,7 @@ def device_user(intent_function):
         device = self._devices_by_name[device_name]
         device.wait()
         controller = device.media_controller
+        controller.update_status()
         controller.block_until_active(10)
         intent_function(self, message, controller)
     return new_function
