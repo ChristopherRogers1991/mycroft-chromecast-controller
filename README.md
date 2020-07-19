@@ -1,6 +1,9 @@
 # mycroft-chromecast-controller
 A Mycroft skill for controlling media playback on a Chromecast
 
+## Short Demo
+https://youtu.be/ZDXt9FaawUQ
+
 ## Sample Phrases
 1. Play Chromecast
 2. Pause Chromecast
