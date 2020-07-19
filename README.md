@@ -7,3 +7,4 @@ A Mycroft skill for controlling media playback on a Chromecast
 3. Skip forward
 4. Go back
 5. Go back 1 minute
+6. Go to the beginning
