@@ -21,7 +21,6 @@ import time
 
 from adapt.intent import IntentBuilder
 from mycroft.skills.core import MycroftSkill, intent_handler
-from mycroft.messagebus.message import Message
 from mycroft.util.log import getLogger
 from mycroft.util.parse import extract_duration
 
@@ -75,7 +74,9 @@ class CaseInsensitiveDict(dict):
 
 
 def get_controller_by_name(name):
-    cc: pychromecast.Chromecast = list(pychromecast.get_listed_chromecasts([name])[0])[0]
+    devices, browser = pychromecast.get_listed_chromecasts([name])
+    pychromecast.discovery.stop_discovery(browser)
+    cc = list(devices[0])[0]
     cc.wait()
     cc.media_controller.block_until_active(10)
     return cc.media_controller
@@ -110,7 +111,7 @@ class ChromecastControllerSkill(MycroftSkill):
         chromecasts, browser = pychromecast.get_chromecasts()
         pychromecast.discovery.stop_discovery(browser)
         self._devices_by_name = {cc.device.friendly_name: cc for cc in chromecasts}
-        self._devices_by_name: Dict[str, pychromecast.Chromecast] = CaseInsensitiveDict(self._devices_by_name)
+        self._devices_by_name = CaseInsensitiveDict(self._devices_by_name)
         for name in self._devices_by_name.keys():
             self.register_vocabulary(name, "Device")
 
