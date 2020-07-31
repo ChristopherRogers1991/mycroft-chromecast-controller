@@ -25,10 +25,13 @@ from mycroft.util.log import getLogger
 from mycroft.util.parse import extract_duration
 
 import pychromecast
+import logging
 
 __author__ = 'ChristopherRogers1991'
 
 LOGGER = getLogger(__name__)
+logging.getLogger('zeroconf').setLevel(logging.ERROR)
+logging.getLogger('pychromecast').setLevel(logging.WARNING)
 
 
 class CaseInsensitiveDict(dict):
@@ -80,10 +83,9 @@ def device_user(intent_function):
             self.speak_dialog('no.device')
             return
         device = self._devices_by_name[device_name]
-        device.wait()
+        # device.wait()
         controller = device.media_controller
-        controller.update_status()
-        controller.block_until_active(10)
+        # controller.block_until_active(10)
         intent_function(self, message, controller)
     return new_function
 
@@ -100,13 +102,21 @@ class ChromecastControllerSkill(MycroftSkill):
         # Would be used to set the subtitle track, but enabling subtitles does
         # not currently work
         # self._subtitle_language = "en"
+        self._devices_by_name = dict()
+        self.refresh_devices()
+        self.schedule_repeating_event(self.refresh_devices, None, 600)
+        for name, device in self._devices_by_name.items():
+            self.register_vocabulary(name, "Device")
 
+    def refresh_devices(self):
         chromecasts, browser = pychromecast.get_chromecasts()
         pychromecast.discovery.stop_discovery(browser)
-        self._devices_by_name = {cc.device.friendly_name: cc for cc in chromecasts}
-        self._devices_by_name = CaseInsensitiveDict(self._devices_by_name)
-        for name in self._devices_by_name.keys():
-            self.register_vocabulary(name, "Device")
+        devices = {cc.device.friendly_name: cc for cc in chromecasts}
+        for name, device in devices.items():
+            device.wait(60)
+            device.media_controller.block_until_active(60)
+        self._devices_by_name = CaseInsensitiveDict(devices)
+
 
     @intent_handler(IntentBuilder("PauseChromecast")
                     .require("Pause")
