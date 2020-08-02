@@ -76,17 +76,29 @@ class CaseInsensitiveDict(dict):
             self.__setitem__(k, v)
 
 
+import time
 def device_user(intent_function):
     def new_function(self, message):
         device_name = message.data.get("Device", self._default_devicename)
         if not device_name:
             self.speak_dialog('no.device')
             return
-        device = self._devices_by_name[device_name]
-        # device.wait()
+        proper_name = self._devices_by_name[device_name]
+        devices, browser = pychromecast.get_listed_chromecasts([proper_name])
+        device = list(devices)[0]
+        device.wait()
         controller = device.media_controller
-        # controller.block_until_active(10)
+        controller.block_until_active(10)
+
+        time.sleep(.5)
         intent_function(self, message, controller)
+
+        pychromecast.discovery.stop_discovery(browser)
+        device.disconnect()
+        del(browser)
+        del(device)
+        del(controller)
+
     return new_function
 
 
@@ -111,10 +123,7 @@ class ChromecastControllerSkill(MycroftSkill):
     def refresh_devices(self):
         chromecasts, browser = pychromecast.get_chromecasts()
         pychromecast.discovery.stop_discovery(browser)
-        devices = {cc.device.friendly_name: cc for cc in chromecasts}
-        for name, device in devices.items():
-            device.wait(60)
-            device.media_controller.block_until_active(60)
+        devices = {cc.device.friendly_name: cc.device.friendly_name for cc in chromecasts}
         self._devices_by_name = CaseInsensitiveDict(devices)
 
 
