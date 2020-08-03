@@ -3,12 +3,6 @@ skillMetadata:
     - name: Configuration
       fields:
         - type: label
-          label: Default Device, to be used when no device name is given in the command
-        - name: default_device
-          type: text
-          label: Default device
-          value: ""
-        - type: label
           label: Default duration (in seconds) for skipping forward/backward
         - name: default_duration
           type: number

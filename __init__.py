@@ -26,12 +26,17 @@ from mycroft.util.parse import extract_duration
 
 import pychromecast
 import logging
+import json
 
 __author__ = 'ChristopherRogers1991'
 
 LOGGER = getLogger(__name__)
 logging.getLogger('zeroconf').setLevel(logging.ERROR)
 logging.getLogger('pychromecast').setLevel(logging.WARNING)
+
+
+SETTINGS_FILE="internal_settings.json"
+DEFAULT_DEVICE="default_device"
 
 
 class CaseInsensitiveDict(dict):
@@ -76,28 +81,48 @@ class CaseInsensitiveDict(dict):
             self.__setitem__(k, v)
 
 
-import time
+def cache(func):
+    """
+    Decorator to cache a function's result.
+    This sets a property of the function itself
+    to the result of the function call. This avoids
+    the need to keep state in another object.
+    This adds a `use_cache` parameter to the function.
+    If set to False, the result will be regenerated. It
+    is True by default.
+    """
+    func.cached_result = None
+
+    def new_func(self, use_cache: bool = True):
+        if not use_cache or not func.cached_result:
+            func.cached_result = func(self)
+        return func.cached_result
+
+    return new_func
+
+
 def device_user(intent_function):
     def new_function(self, message):
-        device_name = message.data.get("Device", self._default_devicename)
+        device_name = message.data.get("Device", self._default_devicename())
         if not device_name:
             self.speak_dialog('no.device')
             return
-        proper_name = self._devices_by_name[device_name]
+        proper_name = self._devices_by_name.get(device_name)
         devices, browser = pychromecast.get_listed_chromecasts([proper_name])
+
+        if not devices:
+            self.speak_dialog("device.not.found", {"device": device_name})
+            return
+
         device = list(devices)[0]
         device.wait()
         controller = device.media_controller
         controller.block_until_active(10)
 
-        time.sleep(.5)
         intent_function(self, message, controller)
 
         pychromecast.discovery.stop_discovery(browser)
         device.disconnect()
-        del(browser)
-        del(device)
-        del(controller)
 
     return new_function
 
@@ -108,17 +133,34 @@ class ChromecastControllerSkill(MycroftSkill):
         super(ChromecastControllerSkill, self).__init__(name="ChromecastControllerSkill")
 
     def initialize(self):
-        self._default_devicename = self.settings.get('default_device')
         self._default_duration = int(self.settings.get('default_duration', 30))
-
-        # Would be used to set the subtitle track, but enabling subtitles does
-        # not currently work
-        # self._subtitle_language = "en"
         self._devices_by_name = dict()
         self.refresh_devices()
         self.schedule_repeating_event(self.refresh_devices, None, 600)
         for name, device in self._devices_by_name.items():
             self.register_vocabulary(name, "Device")
+
+    @cache
+    def _default_devicename(self):
+        return self._internal_settings.get(DEFAULT_DEVICE)
+
+    @property
+    def _internal_settings(self):
+        try:
+            with self.file_system.open(SETTINGS_FILE, 'r') as settings_file:
+                return json.loads(settings_file.read()) or dict()
+        except FileNotFoundError:
+            return dict()
+        except json.decoder.JSONDecodeError:
+            LOGGER.warn("Could not decode settings. Returning empty dict.")
+            return dict()
+
+    def _write_settings(self, **kwargs):
+        settings = self._internal_settings
+        settings.update(kwargs)
+        LOGGER.info("new settings: {}".format(settings))
+        with self.file_system.open(SETTINGS_FILE, 'w') as settings_file:
+            return settings_file.write(json.dumps(settings))
 
     def refresh_devices(self):
         chromecasts, browser = pychromecast.get_chromecasts()
@@ -176,35 +218,26 @@ class ChromecastControllerSkill(MycroftSkill):
     def _disable_subtitles(self, _message, controller):
         controller.disable_subtitle()
 
-    # Enabling subtitles does not currently work
-    # @intent_handler(IntentBuilder("SubtitlesEnableChromecast")
-    #                 .require("Subtitles")
-    #                 .require("Enable")
-    #                 .optionally("Chromecast")
-    #                 .optionally("Device"))
-    # def _enable_subtitles(self, message):
-    #     device = message.data.get("Device", self._default_devicename)
-    #     controller = get_controller_by_name(device)
-    #     tracks = filter(lambda t: t['language'] == self._subtitle_language, controller.status.subtitle_tracks)
-    #     track_id = next(tracks)["trackId"]
-    #     controller.enable_subtitle(track_id)
+    @intent_handler(IntentBuilder("ListChromecasts")
+                    .require("List")
+                    .require("Chromecasts"))
+    def _list_devices(self, _message):
+        devices = ", ".join(self._devices_by_name.values())
+        self.speak_dialog("list.devices", {"devices": devices})
 
-    # previous/next in queue don't seem to work
-    # @intent_handler(IntentBuilder("NextChromecast")
-    #                 .require("Next")
-    #                 .optionally("Chromecast")
-    #                 .optionally("Device"))
-    # @device_user
-    # def _next(self, _message, controller):
-    #     controller.queue_next()
-
-    # @intent_handler(IntentBuilder("PreviousChromecast")
-    #                 .require("Previous")
-    #                 .optionally("Chromecast")
-    #                 .optionally("Device"))
-    # @device_user
-    # def _previous(self, _message, controller):
-    #     controller.queue_prev()
+    @intent_handler(IntentBuilder("SetDefaultChromecasts")
+                    .require("set")
+                    .require("Device")
+                    .require("Default")
+                    .require("Chromecast"))
+    def _set_default_device(self, message):
+        device_name = message.data.get("Device")
+        proper_name = self._devices_by_name.get(device_name)
+        if not proper_name:
+            self.speak_dialog("device.not.found", {"device", device_name})
+        self._write_settings(default_device=proper_name)
+        self.speak_dialog("default.set", {"device": proper_name})
+        self._default_devicename(use_cache=False)
 
 
 def create_skill():
