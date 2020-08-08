@@ -220,7 +220,7 @@ class ChromecastControllerSkill(MycroftSkill):
 
     @intent_handler(IntentBuilder("ListChromecasts")
                     .require("List")
-                    .require("Chromecasts"))
+                    .one_of("Chromecasts", "Chromecast"))
     def _list_devices(self, _message):
         devices = ", ".join(self._devices_by_name.values())
         self.speak_dialog("list.devices", {"devices": devices})
